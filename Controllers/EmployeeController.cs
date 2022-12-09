@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using EmployeesCh12.Data;
 using EmployeesCh12.Models;
+using EmployeesCh12.ViewModel;
 
 namespace EmployeesCh12.Controllers
 {
@@ -20,10 +21,78 @@ namespace EmployeesCh12.Controllers
         }
 
         // GET: Employee
-        public async Task<IActionResult> Index()
+        /*public async Task<IActionResult> Index()
         {
             var employeeContext = _context.Employees.Include(e => e.Department);
             return View(await employeeContext.ToListAsync());
+        }*/
+
+        /*Retrive employee information, specifying what the grouping is going to be.  It will
+        be based on DepartmentID.  In new DeptGroup we are specifying deptgroup as a key.
+        It will retrieve data by using deptgroup as a key and when that changes it will specify a count.
+        This is how we get an unpdated count of employees in the department*/
+        public IActionResult DeptCount()
+        {
+            IQueryable<DepartmentGroup> data =
+                 from employee in _context.Employees.Include(e => e.Department)
+                 group employee by employee.DepartmentID into deptGroup
+                 select new DepartmentGroup()
+                 {
+                     DepartmentID = deptGroup.Key,
+                     DepartmentCount = deptGroup.Count()
+                 };
+            return View(data.ToList());
+        }
+
+
+
+        //// searchString parameter - for search box
+        //// string currentFilter - Pagination
+        public async Task <IActionResult> Index(string sortOrder, string currentFilter, string searchString, int? pageNumber) 
+        {
+            ViewData["CurrentSort"] = sortOrder;                                     //stores current sort order
+            ViewData["NameSortParm"] = String.IsNullOrEmpty(sortOrder) ? "name_desc" : "";
+            ViewData["DateSortParm"] = sortOrder == "Date" ? "date_desc" : "Date";
+
+            if (searchString != null)                                               //if is not null that indicates a new search
+            {
+                pageNumber = 1;
+            }
+            else
+            {
+                searchString = currentFilter;                                   //otherwise searchString will be whatever current search filter is
+            }
+            ViewData["CurrentFilter"] = searchString;                          
+
+
+            var employees = from e in _context.Employees
+                            .Include(e => e.Department)
+                            .Include(e => e.Benefits) select e;
+
+            if (!String.IsNullOrEmpty(searchString))                                //check searchString to see if there is anything there
+            {
+                employees = employees.Where(s => s.LastName.Contains(searchString) //if something is there we let do a search with first or last name
+                            || s.FirstName.Contains(searchString));                  ///database is queried based on what is in that string
+             }
+              
+            switch (sortOrder)
+            {
+                case "name_desc":
+                    employees = employees.OrderByDescending(s => s.LastName);
+                    break;
+                case "Date":
+                    employees = employees.OrderBy(s => s.HireDate);
+                    break;
+                case "date_desc":
+                    employees = employees.OrderByDescending(s => s.HireDate);
+                    break;
+                default:
+                    employees = employees.OrderBy(s => s.LastName);
+                    break;
+            }
+            int pageSize = 4;
+            return View(await PaginatedList<Employee>.CreateAsync(employees.AsNoTracking(), pageNumber ?? 1, pageSize));
+            //return View(employees);
         }
 
         // GET: Employee/Details/5
